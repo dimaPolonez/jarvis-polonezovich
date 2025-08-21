@@ -11,7 +11,7 @@ pub fn start() -> Result<(), ()> {
 fn main_loop() -> Result<(), ()> {
     let mut start: SystemTime;
     let sounds_directory = audio::get_sound_directory().unwrap();
-    let frame_length: usize = 512; // default for every wake-word engine
+    let frame_length: usize = recorder::frame_length(); // use recorder's frame length
     let mut frame_buffer: Vec<i16> = vec![0; frame_length];
 
     // play some run phrase
@@ -35,20 +35,30 @@ fn main_loop() -> Result<(), ()> {
         // recognize wake-word
         match listener::data_callback(&frame_buffer) {
             Some(keyword_index) => {
+                info!("Wake word detected (index: {})", keyword_index);
                 // wake-word activated, process further commands
                 // capture current time
                 start = SystemTime::now();
 
-                // play some greet phrase
-                // @TODO. Make it via commands or upcoming events system.
-                audio::play_sound(&sounds_directory.join(format!("{}.wav", config::ASSISTANT_GREET_PHRASES.choose(&mut rand::thread_rng()).unwrap())));
+                // activation sound
+                if let Some(p) = audio::resolve_sound_path("activate.mp3") {
+                    info!("Activation sound: {}", p.display());
+                    audio::play_sound(&p);
+                } else {
+                    let p = sounds_directory.join("ok1.wav");
+                    info!("Activation sound (fallback): {}", p.display());
+                    audio::play_sound(&p);
+                }
 
                 // wait for voice commands
                 'voice_recognition: loop {
+                    info!("Entering listening mode");
                     // read from microphone
                     recorder::read_microphone(&mut frame_buffer);
 
                     // stt part (without partials)
+                    // guard: skip STT for a short warmup after activation to avoid self-trigger
+                    if start.elapsed().unwrap_or_default() < config::CMS_WARMUP_MUTE { continue 'voice_recognition; }
                     if let Some(mut recognized_voice) = stt::recognize(&frame_buffer, false) {
                         // something was recognized
                         info!("Recognized voice: {}", recognized_voice);
@@ -61,6 +71,11 @@ fn main_loop() -> Result<(), ()> {
                         }
                         recognized_voice = recognized_voice.trim().into();
 
+                        // ignore empty after filtration; keep listening until timeout
+                        if recognized_voice.is_empty() {
+                            continue 'voice_recognition;
+                        }
+
                         // infer command
                         if let Some((cmd_path, cmd_config)) = commands::fetch_command(&recognized_voice, &COMMANDS_LIST.get().unwrap()) {
                             // some debug info
@@ -70,35 +85,59 @@ fn main_loop() -> Result<(), ()> {
 
                             // execute the command
                             match commands::execute_command(&cmd_path, &cmd_config) {
-                                Ok(chain) => {
-                                    // success
-                                    info!("Command executed successfully.");
-
-                                    if chain {
-                                        // chain commands
-                                        start = SystemTime::now();
-                                    } else {
-                                        // skip, if chaining is not required
-                                        start = start.checked_sub(core::time::Duration::from_secs(1000)).unwrap();
-                                    }
-
-                                    continue 'voice_recognition; // continue voice recognition
+                                Ok(_chain) => {
+                                    // success: always stop listening and return to wake mode
+                                    info!("Command executed successfully. Returning to wake mode");
+                                    break 'voice_recognition;
                                 },
                                 Err(msg) => {
-                                    // fail
+                                    // fail -> stop listening silently
                                     error!("Error executing command: {}", msg);
+                                    break 'voice_recognition;
                                 }
                             }
                         }
-
-                        // return to wake-word listening after command execution (no matter successful or not)
-                        break 'voice_recognition;
+                        // no command matched -> keep listening until timeout
+                        debug!("No command matched; continue listening");
+                        continue 'voice_recognition;
                     }
 
                     // only recognize voice for a certain period of time
                     match start.elapsed() {
                         Ok(elapsed) if elapsed > config::CMS_WAIT_DELAY => {
                             // return to wake-word listening after N seconds
+                            let mut played = false;
+                            if let Some(p) = audio::resolve_sound_path("cancel.mp3") { // current voice
+                                info!("Cancel sound on timeout: {}", p.display());
+                                audio::play_sound_blocking(&p);
+                                played = true;
+                            }
+                            if !played {
+                                let p = crate::SOUND_DIR.join(config::DEFAULT_VOICE).join("cancel.mp3");
+                                if p.exists() {
+                                    info!("Cancel sound on timeout (default voice): {}", p.display());
+                                    audio::play_sound_blocking(&p);
+                                    played = true;
+                                }
+                            }
+                            if !played {
+                                let p = sounds_directory.join("not_found.wav"); // current voice wav
+                                if p.exists() {
+                                    info!("Cancel sound on timeout (fallback wav): {}", p.display());
+                                    audio::play_sound_blocking(&p);
+                                    played = true;
+                                }
+                            }
+                            if !played {
+                                let p = crate::SOUND_DIR.join(config::DEFAULT_VOICE).join("not_found.wav");
+                                if p.exists() {
+                                    info!("Cancel sound on timeout (default wav): {}", p.display());
+                                    audio::play_sound_blocking(&p);
+                                } else {
+                                    warn!("No cancel sound found in any location.");
+                                }
+                            }
+                            info!("Listening timeout reached, returning to wake mode");
                             break 'voice_recognition;
                         },
                         _ => ()

@@ -5,7 +5,10 @@ use once_cell::sync::OnceCell;
 use rustpotter::{Rustpotter, RustpotterConfig, WavFmt, DetectorConfig, FiltersConfig, ScoreMode, GainNormalizationConfig, BandPassConfig};
 
 use crate::DB;
+use crate::listener;
 use crate::config;
+
+
 
 // store rustpotter instance
 static RUSTPOTTER: OnceCell<Mutex<Rustpotter>> = OnceCell::new();
@@ -46,18 +49,23 @@ pub fn init() -> Result<(), ()> {
     Ok(())
 }
 
+
+
 pub fn data_callback(frame_buffer: &[i16]) -> Option<i32> {
+    // Simple approach: only listen to microphone input, ignore all system audio
+    // The microphone should only pick up your voice, not system sounds
+    
+    // Process the audio frame directly with rustpotter
     let mut lock = RUSTPOTTER.get().unwrap().lock();
     let rustpotter = lock.as_mut().unwrap();
     let detection = rustpotter.process_i16(&frame_buffer);
 
     if let Some(detection) = detection {
         if detection.score > config::RUSPOTTER_MIN_SCORE {
-            info!("Rustpotter detection info:\n{:?}", detection);
-
+            info!("Rustpotter detection: score={:.3} avg={:.3} gain={:?}", detection.score, detection.avg_score, detection.gain);
             return Some(0)
         } else {
-            info!("Rustpotter detection info:\n{:?}", detection)
+            debug!("Rustpotter below threshold: score={:.3} avg={:.3}", detection.score, detection.avg_score)
         }
     }
 

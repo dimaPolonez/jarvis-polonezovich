@@ -78,29 +78,29 @@ pub const TRAY_ICON: &str = "32x32.png";
 pub const TRAY_TOOLTIP: &str = "Jarvis Voice Assistant";
 
 // RUSPOTTER
-pub const RUSPOTTER_MIN_SCORE: f32 = 0.62;
+pub const RUSPOTTER_MIN_SCORE: f32 = 0.55;
 pub const RUSTPOTTER_DEFAULT_CONFIG: Lazy<RustpotterConfig> = Lazy::new(|| {
     RustpotterConfig {
         fmt: WavFmt::default(),
         detector: DetectorConfig {
             avg_threshold: 0.,
-            threshold: 0.5,
-            min_scores: 15,
+            threshold: 0.42,
+            min_scores: 12,
             score_mode: ScoreMode::Average,
             comparator_band_size: 5,
-            comparator_ref: 0.22
+            comparator_ref: 0.18
         },
         filters: FiltersConfig {
             gain_normalizer: GainNormalizationConfig {
                 enabled: true,
                 gain_ref: None,
-                min_gain: 0.7,
-                max_gain: 1.0,
+                min_gain: 0.6,
+                max_gain: 1.2,
             },
             band_pass: BandPassConfig {
                 enabled: true,
-                low_cutoff: 80.,
-                high_cutoff: 400.,
+                low_cutoff: 100.,
+                high_cutoff: 3500.,
             }
         }
     }
@@ -120,7 +120,10 @@ pub const VOSK_MIN_RATIO: f64 = 70.0;
 
 // ETC
 pub const CMD_RATIO_THRESHOLD: f64 = 65f64;
-pub const CMS_WAIT_DELAY: std::time::Duration = std::time::Duration::from_secs(15);
+pub const CMS_WAIT_DELAY: std::time::Duration = std::time::Duration::from_secs(6);
+pub const CMS_WARMUP_MUTE: std::time::Duration = std::time::Duration::from_millis(600);
+pub const PLAYBACK_WAKE_MUTE: std::time::Duration = std::time::Duration::from_millis(900);
+
 
 pub const ASSISTANT_GREET_PHRASES: [&str; 3] = ["greet1", "greet2", "greet3"];
 pub const ASSISTANT_PHRASES_TBR: [&str; 17] = [
