@@ -110,3 +110,4 @@ Cargo.lock
 
 # Tauri
 src-tauri/target/
+test_scripts/

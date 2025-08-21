@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "routify -c dev:vite",
     "dev:routify": "routify",
-    "dev:vite": "vite",
+    "dev:frontend": "vite",
+    "dev:backend": "cd ../app && cargo run",
     "build": "routify build && vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
