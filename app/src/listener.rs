@@ -6,6 +6,7 @@ mod vosk;
 
 use once_cell::sync::OnceCell;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 use crate::{config, stt};
 use crate::config::structs::WakeWordEngine;
@@ -17,6 +18,7 @@ static WAKE_WORD_ENGINE: OnceCell<WakeWordEngine> = OnceCell::new();
 
 // track listening state
 static LISTENING: AtomicBool = AtomicBool::new(false);
+static mut PLAYBACK_MUTE_UNTIL: Option<Instant> = None;
 
 pub fn init() -> Result<(), ()> {
     if !WAKE_WORD_ENGINE.get().is_none() {return Ok(());} // already initialized
@@ -49,6 +51,21 @@ pub fn init() -> Result<(), ()> {
 }
 
 pub fn data_callback(frame_buffer: &[i16]) -> Option<i32> {
+    // suppress wake while app is playing sounds
+    unsafe {
+        if let Some(until) = PLAYBACK_MUTE_UNTIL {
+            if until > Instant::now() {
+                return None;
+            } else {
+                PLAYBACK_MUTE_UNTIL = None;
+            }
+        }
+    }
+
+    // suppress wake on strong noise spikes (set by rustpotter gate)
+    if let Some(until) = unsafe { PLAYBACK_MUTE_UNTIL } {
+        if until > Instant::now() { return None; }
+    }
     match WAKE_WORD_ENGINE.get().unwrap() {
         WakeWordEngine::Porcupine => {
             porcupine::data_callback(frame_buffer)
@@ -59,5 +76,11 @@ pub fn data_callback(frame_buffer: &[i16]) -> Option<i32> {
         WakeWordEngine::Vosk => {
             vosk::data_callback(frame_buffer)
         }
+    }
+}
+
+pub fn mute_wake_for(duration: std::time::Duration) {
+    unsafe {
+        PLAYBACK_MUTE_UNTIL = Some(std::time::Instant::now() + duration);
     }
 }

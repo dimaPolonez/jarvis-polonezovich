@@ -111,3 +111,7 @@ pub fn stop_recording() -> Result<(), ()> {
 pub fn get_selected_microphone_index() -> i32 {
     DB.get().unwrap().microphone
 }
+
+pub fn frame_length() -> usize {
+    FRAME_LENGTH.get().copied().unwrap_or(512) as usize
+}
